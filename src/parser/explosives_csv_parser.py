@@ -31,9 +31,6 @@ class ExplosivesMetadata:
 
 
 class ExplosivesCsvParser:
-    # signal_title: Final[str] = "Сигналы (S)"
-    # background_title: Final[str] = "Фон"
-    # end_line: Final[str] = "Спектры (SP);SP=(F-S)/F"
     class Stage(StrEnum):
         Start = ""
         Signal = "Сигналы (S)"
@@ -45,6 +42,9 @@ class ExplosivesCsvParser:
         start: int
         end: int
         slice: list[str] = field(default_factory=list)
+
+    signal_lines_needed: Final[int] = 128
+    bg_lines_needed: Final[int] = 128
 
     @classmethod
     def _get_explosives_meta(cls, p_file_csv: Path) -> ExplosivesMetadata:
@@ -87,7 +87,6 @@ class ExplosivesCsvParser:
 
         lines = p_file_csv.read_text().splitlines()
         intervals = cls._get_stages_intervals(lines)
-        # pprint(intervals)
 
         s_success, signals_col_count, signals, s_errors = cls._parse_signals(intervals[cls.Stage.Signal])
         b_success, background, b_errors = cls._parse_background(intervals[cls.Stage.Background])
@@ -133,6 +132,9 @@ class ExplosivesCsvParser:
 
             signals.append(signals_line)
 
+        if len(signals) > cls.signal_lines_needed:
+            errors.append(f"signals lines < {cls.signal_lines_needed}. Count: {len(signals)}")
+
         # transposition
         signals = [list(column) for column in zip(*signals, strict=True)]
 
@@ -150,6 +152,9 @@ class ExplosivesCsvParser:
             if not line.isdigit():
                 errors.append(f"line={line_id + interval.start}: background must be an integer.")
             bg.append(int(line))
+
+        if len(bg) > cls.bg_lines_needed:
+            errors.append(f"background lines < {cls.signal_lines_needed}. Count: {len(bg)}")
 
         success: bool = len(errors) == 0
         return success, bg, errors
@@ -183,18 +188,23 @@ def parse_explosives_csv(lines: list[str]) -> None:
 
 
 if __name__ == "__main__":
-    p_data = Path(__file__).parent.parent.parent / "data_explosives"
-    p_csv_file = p_data / "Гексоген" / "Растворы" / "2500нг" / "1.csv"
-    p_csv_file = p_data / "Гексоген" / "Палец" / "Концентрация не задана" / "1.csv"
+    def main():
+        p_data = Path(__file__).parent.parent.parent / "data_explosives"
+        p_csv_file = p_data / "Гексоген" / "Растворы" / "2500нг" / "1.csv"
+        # p_csv_file = p_data / "Гексоген" / "Палец" / "Концентрация не задана" / "1.csv"
 
-    success, out, errors = ExplosivesCsvParser.parse_explosives(p_csv_file)
-    print()
-    print(f"{success = }")
-    print(f"{out.metadata.substance = }")
-    print(f"{out.metadata.sample_type = }")
-    print(f"{out.metadata.concentration_ng = }")
-    print(f"{out.metadata.source_path = }")
-    print()
-    print(f"{out.signals_col_count = }")
-    print(f"{out.signals = }")
-    print(f"{out.background = }")
+        success, out, errors = ExplosivesCsvParser.parse_explosives(p_csv_file)
+        print()
+        print(f"{success = }")
+        print("errors: ", end="")
+        pprint(errors)
+        print(f"{out.metadata.substance = }")
+        print(f"{out.metadata.sample_type = }")
+        print(f"{out.metadata.concentration_ng = }")
+        print(f"{out.metadata.source_path = }")
+        print()
+        print(f"{out.signals_col_count = }")
+        print(f"{out.signals = }")
+        print(f"{out.background = }")
+
+    main()
