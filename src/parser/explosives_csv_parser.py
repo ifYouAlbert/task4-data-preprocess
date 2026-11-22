@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import namedtuple
+import json
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
@@ -88,6 +88,7 @@ class ExplosivesCsvParser:
         lines = p_file_csv.read_text().splitlines()
         intervals = cls._get_stages_intervals(lines)
 
+        print("mark", p_file_csv)
         s_success, signals_col_count, signals, s_errors = cls._parse_signals(intervals[cls.Stage.Signal])
         b_success, background, b_errors = cls._parse_background(intervals[cls.Stage.Background])
 
@@ -125,15 +126,15 @@ class ExplosivesCsvParser:
                 signals_line: list[int] = list(map(int, raw_signals_line))
             except ValueError:
                 errors.append(f"line={line_id + interval.start}: signals must be an integer.")
-                return False, signals_col_count, signals, errors
+                continue
 
             if len(signals_line) != signals_col_count:
                 errors.append(f"line={line_id + interval.start}: signals line size is not equal to {signals_col_count}")
 
             signals.append(signals_line)
 
-        if len(signals) > cls.signal_lines_needed:
-            errors.append(f"signals lines < {cls.signal_lines_needed}. Count: {len(signals)}")
+        if len(signals) != cls.signal_lines_needed:
+            errors.append(f"signals lines != {cls.signal_lines_needed}. Count: {len(signals)}")
 
         # transposition
         signals = [list(column) for column in zip(*signals, strict=True)]
@@ -149,12 +150,15 @@ class ExplosivesCsvParser:
         for line_id, line in enumerate(interval.slice):
             if line.isspace() or line == "":
                 continue
-            if not line.isdigit():
-                errors.append(f"line={line_id + interval.start}: background must be an integer.")
-            bg.append(int(line))
 
-        if len(bg) > cls.bg_lines_needed:
-            errors.append(f"background lines < {cls.signal_lines_needed}. Count: {len(bg)}")
+            try:
+                bg.append(int(line))
+            except ValueError:
+                errors.append(f"line={line_id + interval.start}: background must be an integer.")
+                continue
+
+        if len(bg) != cls.bg_lines_needed:
+            errors.append(f"background lines != {cls.signal_lines_needed}. Count: {len(bg)}")
 
         success: bool = len(errors) == 0
         return success, bg, errors
@@ -190,21 +194,44 @@ def parse_explosives_csv(lines: list[str]) -> None:
 if __name__ == "__main__":
     def main():
         p_data = Path(__file__).parent.parent.parent / "data_explosives"
-        p_csv_file = p_data / "Гексоген" / "Растворы" / "2500нг" / "1.csv"
+        # p_csv_file = p_data / "Гексоген" / "Растворы" / "2500нг" / "1.csv"
         # p_csv_file = p_data / "Гексоген" / "Палец" / "Концентрация не задана" / "1.csv"
 
-        success, out, errors = ExplosivesCsvParser.parse_explosives(p_csv_file)
+        success_count: int = 0
+        files_count: int = 0
+        all_errors = {}
+        all_out = {}
+
+        for p in p_data.rglob("*.csv"):
+            success, out, errors = ExplosivesCsvParser.parse_explosives(p)
+
+            files_count += 1
+            if success:
+                success_count += 1
+            else:
+                all_errors.update({p.relative_to(p_data).as_posix(): errors})
+            all_out.update({p.relative_to(p_data).as_posix(): out})
+
+            print()
+            print(f"{success = }")
+            print(f"errors: {json.dumps(errors, indent=4)}")
+            print(f"{out.metadata.substance = }")
+            print(f"{out.metadata.sample_type = }")
+            print(f"{out.metadata.concentration_ng = }")
+            print(f"{out.metadata.source_path = }")
+            print()
+            print(f"{out.signals_col_count = }")
+            print(f"{out.signals = }")
+            print(f"{out.background = }")
+
         print()
-        print(f"{success = }")
-        print("errors: ", end="")
-        pprint(errors)
-        print(f"{out.metadata.substance = }")
-        print(f"{out.metadata.sample_type = }")
-        print(f"{out.metadata.concentration_ng = }")
-        print(f"{out.metadata.source_path = }")
-        print()
-        print(f"{out.signals_col_count = }")
-        print(f"{out.signals = }")
-        print(f"{out.background = }")
+        print("="*50)
+        print(f"{files_count = }")
+        print(f"{success_count = }")
+        print(f"failed = {files_count - success_count}")
+        print("errors:", json.dumps(all_errors, indent=4, ensure_ascii=False))
+
+        ab1 = all_out["Гексоген/Растворы/1500нг/1.csv"]
+        print(f"{ab1}")
 
     main()
