@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from pprint import pprint
-from typing import Final
+from typing import Final, Counter
 
 from pydantic import BaseModel
 
@@ -65,7 +65,7 @@ class ExplosivesCsvParser:
         if not p_file_csv.exists() or not p_file_csv.is_file():
             raise FileNotFoundError
 
-        lines = p_file_csv.read_text().splitlines()
+        lines = p_file_csv.read_text(encoding="utf-8").splitlines()
         intervals = cls._get_sections_intervals(lines)
 
         s_success, signals, s_stats = cls._parse_section(intervals[cls.Section.Signal])
@@ -216,11 +216,12 @@ if __name__ == "__main__":
         class StatsOutput(BaseModel):
             data: list[SavedStats]
 
-        p_data = Path(__file__).parent.parent.parent / "data_explosives"
+        p_project = Path(__file__).parent.parent.parent
+        p_data = p_project / "data_explosives"
 
-        p_output = Path(__file__).parent / "output"
-        p_parsed = p_output / "parsed_output.json"
-        p_stats = p_output / "stats.json"
+        p_output = p_project / "output" / "parser"
+        p_parsed_output = p_output / "parsed_output.json"
+        p_stats_output = p_output / "stats.json"
 
         # p_csv_file = p_data / "Гексоген" / "Растворы" / "2500нг" / "1.csv"
         # p_csv_file = p_data / "Гексоген" / "Палец" / "Концентрация не задана" / "1.csv"
@@ -258,18 +259,18 @@ if __name__ == "__main__":
         print(f"{success_count = }")
         print(f"failed = {files_count - success_count}")
         print()
-        print("signal num cols: ", set([
+        print("signal num cols: ", Counter([
             el.signal_stats.num_cols
             for el in output.data
         ]))
 
-        print("bg num cols: ", set([
+        print("bg num cols: ", Counter([
             el.background_stats.num_cols
             for el in output.data
         ]))
 
         p_output.mkdir(parents=True, exist_ok=True)
-        p_parsed.write_text(output.model_dump_json(indent=4))
+        p_parsed_output.write_text(output.model_dump_json(indent=2))
 
         stats = StatsOutput(data=[
             SavedStats(
@@ -280,7 +281,6 @@ if __name__ == "__main__":
             )
             for el in output.data
         ])
-        p_stats.write_text(stats.model_dump_json(indent=4))
-
+        p_stats_output.write_text(stats.model_dump_json(indent=2))
 
     main()
