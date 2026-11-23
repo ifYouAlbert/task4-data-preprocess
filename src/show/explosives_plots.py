@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from parser.explosives_csv_parser import ExplosivesCsvParser, ParseOutput, ExplosivesMetadata
-from analysis.preprocessing import clip_outliers_iqr, get_spectrum_without_bg
+from analysis.preprocessing import clip_outliers_iqr, get_spectrum_without_bg, normalize_spectrum
 from show.plot_tools import show_plot, PlotLine
 
 
@@ -21,7 +21,7 @@ def get_plot_file_name(metadata: ExplosivesMetadata, signal_index: int) -> str:
     return f"{metadata.substance}_{sample}_{metadata.source_path.stem}_s{signal_index}".lower()
 
 
-def save_plots(parsed: ParseOutput, output_dir: Path, signal_index: int) -> tuple[Path, Path, Path]:
+def save_plots(parsed: ParseOutput, output_dir: Path, signal_index: int) -> tuple[Path, Path, Path, Path]:
     data = parsed.data
     signal = data.signals[signal_index]
     background = data.background
@@ -32,6 +32,7 @@ def save_plots(parsed: ParseOutput, output_dir: Path, signal_index: int) -> tupl
     p_raw_path = output_dir / f"{filename}_raw.png"
     p_corrected_path = output_dir / f"{filename}_spectrum.png"
     p_iqr_path = output_dir / f"{filename}_spectrum_iqr.png"
+    p_normalized_path = output_dir / f"{filename}_spectrum_normalized.png"
 
     show_plot(
         [
@@ -67,7 +68,16 @@ def save_plots(parsed: ParseOutput, output_dir: Path, signal_index: int) -> tupl
         output_path=p_iqr_path,
     )
 
-    return p_raw_path, p_corrected_path, p_iqr_path
+    normalized_spectrum = normalize_spectrum(clipped_spectrum)
+    show_plot(
+        [PlotLine("Нормализованный спектр", normalized_spectrum, "-", "C0")],
+        title=title,
+        xlabel="Спектральные отсчеты",
+        ylabel="Интенсивность, отн. ед.",
+        output_path=p_normalized_path,
+    )
+
+    return p_raw_path, p_corrected_path, p_iqr_path, p_normalized_path
 
 
 if __name__ == "__main__":

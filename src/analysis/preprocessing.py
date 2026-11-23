@@ -28,3 +28,17 @@ def clip_outliers_iqr(spectrum: Sequence[float]) -> list[float]:
     upper_bound = q3 + 1.5 * iqr
 
     return [min(max(value, lower_bound), upper_bound) for value in spectrum]
+
+
+def normalize_spectrum(spectrum: Sequence[float]) -> list[float]:
+    if len(spectrum) == 0:
+        return []
+    if not all(isfinite(value) for value in spectrum):
+        raise ValueError
+
+    minimum = min(spectrum)
+    value_range = max(spectrum) - minimum
+    if value_range == 0:
+        return [0.0] * len(spectrum)
+
+    return [(value - minimum) / value_range for value in spectrum]
