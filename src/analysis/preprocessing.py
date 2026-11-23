@@ -1,4 +1,6 @@
 from collections.abc import Sequence
+from math import isfinite
+from statistics import quantiles
 
 
 def get_spectrum_without_bg(signal: Sequence[float], background: Sequence[float]) -> list[float]:
@@ -12,3 +14,17 @@ def get_spectrum_without_bg(signal: Sequence[float], background: Sequence[float]
         spectrum.append((bg_value - signal_value) / bg_value)
 
     return spectrum
+
+
+def clip_outliers_iqr(spectrum: Sequence[float]) -> list[float]:
+    if not all(isfinite(value) for value in spectrum):
+        raise ValueError
+    if len(spectrum) < 2:
+        return list(spectrum)
+
+    q1, _, q3 = quantiles(spectrum, n=4, method="inclusive")
+    iqr = q3 - q1
+    lower_bound = q1 - 1.5 * iqr
+    upper_bound = q3 + 1.5 * iqr
+
+    return [min(max(value, lower_bound), upper_bound) for value in spectrum]
