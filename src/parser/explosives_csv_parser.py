@@ -10,9 +10,11 @@ from typing import Final
 from pydantic import BaseModel
 
 
-class SampleType(StrEnum):
-    FINGER = "Палец"
-    SOLUTION = "Растворы"
+class ParseOutput(BaseModel):
+    success: bool
+    data: ExplosivesFile
+    signal_stats: ParsedSectionStats
+    background_stats: ParsedSectionStats
 
 
 class ExplosivesFile(BaseModel):
@@ -30,19 +32,17 @@ class ExplosivesMetadata(BaseModel):
     source_path: Path
 
 
-class ParseOutput(BaseModel):
-    success: bool
-    data: ExplosivesFile
-    signal_stats: ParsedSectionStats
-    background_stats: ParsedSectionStats
-
-
 class ParsedSectionStats(BaseModel):
     num_cols: int = 0
     num_missing_fields: int = 0
     num_zero_fields: int = 0
     num_negative_fields: int = 0
     errors: list[str] = field(default_factory=list)
+
+
+class SampleType(StrEnum):
+    FINGER = "Палец"
+    SOLUTION = "Растворы"
 
 
 class ExplosivesCsvParser:
@@ -70,9 +70,10 @@ class ExplosivesCsvParser:
 
         s_success, signals, s_stats = cls._parse_section(intervals[cls.Section.Signal])
         b_success, background, b_stats = cls._parse_section(intervals[cls.Section.Background], has_header=False)
-        if len(background) > 1:
+        if len(background) != 1:
             b_success = False
             b_stats.errors.append("background must have 1 column")
+        b_stats.num_cols = 1
 
         return ParseOutput(
             success=s_success and b_success,
@@ -248,14 +249,24 @@ if __name__ == "__main__":
             print(f"{out.data.metadata.source_path = }")
             print()
             print(f"{out.data.signals_col_count = }")
-            print(f"{out.data.signals = }")
-            print(f"{out.data.background = }")
+            # print(f"{out.data.signals = }")
+            # print(f"{out.data.background = }")
 
         print()
         print("="*50)
         print(f"{files_count = }")
         print(f"{success_count = }")
         print(f"failed = {files_count - success_count}")
+        print()
+        print("signal num cols: ", set([
+            el.signal_stats.num_cols
+            for el in output.data
+        ]))
+
+        print("bg num cols: ", set([
+            el.background_stats.num_cols
+            for el in output.data
+        ]))
 
         p_output.mkdir(parents=True, exist_ok=True)
         p_parsed.write_text(output.model_dump_json(indent=4))
@@ -270,5 +281,6 @@ if __name__ == "__main__":
             for el in output.data
         ])
         p_stats.write_text(stats.model_dump_json(indent=4))
+
 
     main()
