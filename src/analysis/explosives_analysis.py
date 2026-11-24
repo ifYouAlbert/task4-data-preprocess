@@ -1,23 +1,19 @@
 from collections import Counter
+from collections.abc import Sequence
 from math import sqrt
 from pathlib import Path
 from statistics import fmean, median, pvariance
 
 from pydantic import BaseModel
 
-from parser.explosives_csv_parser import (
-    ExplosivesCsvParser,
-    ExplosivesMetadata,
-    ParsedSectionStats,
-    ParseOutput,
-)
+from parser.explosives_csv_parser import ExplosivesMetadata
 
 
 class DescriptiveStatistics(BaseModel):
     mean: float
     median: float
-    modes: list[int]
-    value_range: int
+    modes: list[int | float]
+    value_range: int | float
     mean_absolute_deviation: float
     variance: float
     standard_deviation: float
@@ -26,13 +22,8 @@ class DescriptiveStatistics(BaseModel):
 
 class FileSummary(BaseModel):
     metadata: ExplosivesMetadata
-    signals_shape: tuple[int, int]
-    background_shape: tuple[int]
-    value_type: str = "int"
-    signal_stats: ParsedSectionStats
-    background_stats: ParsedSectionStats
     signals: dict[str, DescriptiveStatistics]
-    background: DescriptiveStatistics
+    background: DescriptiveStatistics | None = None
 
 
 class AnalysisOutput(BaseModel):
@@ -42,7 +33,7 @@ class AnalysisOutput(BaseModel):
     files: list[FileSummary]
 
 
-def describe_series(values: list[int]) -> DescriptiveStatistics:
+def describe_series(values: Sequence[int | float]) -> DescriptiveStatistics:
     average = fmean(values)
     variance = pvariance(values)
     standard_deviation = sqrt(variance)
@@ -65,52 +56,63 @@ def describe_series(values: list[int]) -> DescriptiveStatistics:
     )
 
 
-def analyze_file(out: ParseOutput) -> FileSummary | None:
-    if not out.success:
-        return None
-
-    data = out.data
+def analyze_file(
+    signals: Sequence[Sequence[int | float]],
+    metadata: ExplosivesMetadata,
+    background: Sequence[int | float] | None = None,
+) -> FileSummary:
     return FileSummary(
-        metadata=data.metadata,
-        signals_shape=(len(data.signals), len(data.signals[0])),
-        background_shape=(len(data.background),),
-        signal_stats=out.signal_stats,
-        background_stats=out.background_stats,
-        signals={f"S{index}": describe_series(signal) for index, signal in enumerate(data.signals)},
-        background=describe_series(data.background),
+        metadata=metadata,
+        signals={f"S{index}": describe_series(signal) for index, signal in enumerate(signals)},
+        background=describe_series(background) if background is not None else None,
     )
 
 
 if __name__ == "__main__":
-    def main():
+    from parser.explosives_csv_parser import ExplosivesCsvParser
+    from analysis.preprocessing import get_spectrum
+
+    def main() -> None:
         p_project = Path(__file__).parent.parent.parent
         p_data = p_project / "data_explosives"
 
         p_output = p_project / "output" / "analysis"
-        p_analysis_out = p_output / "analysis_output.json"
+        p_analysis_for_raw_out = p_output / "analysis_for_raw.json"
+        p_analysis_for_preprocess_out = p_output / "analysis_for_preprocess.json"
 
-        parsed_output: list[ParseOutput] = []
+        files: list[FileSummary] = []
+        files_preprocess: list[FileSummary] = []
+        files_skipped = 0
         for p in p_data.rglob("*.csv"):
             out = ExplosivesCsvParser.parse(p)
             if not out.success:
                 print(f"Error in \"{p.relative_to(p_data)}\". Skipping")
+                files_skipped += 1
                 continue
-            parsed_output.append(out)
 
-        files: list[FileSummary] = []
-        for out in parsed_output:
-            summary = analyze_file(out)
-            if summary is not None:
-                files.append(summary)
+            data = out.data
+            files.append(analyze_file(data.signals, data.metadata, data.background))
+            files_preprocess.append(analyze_file(
+                [get_spectrum(signal, data.background) for signal in data.signals],
+                data.metadata,
+            ))
 
         result = AnalysisOutput(
             files_analyzed=len(files),
-            files_skipped=len(parsed_output) - len(files),
+            files_skipped=files_skipped,
             signal_count=sum(len(file.signals) for file in files),
             files=files,
         )
+        result_preprocess = AnalysisOutput(
+            files_analyzed=len(files_preprocess),
+            files_skipped=files_skipped,
+            signal_count=sum(len(file.signals) for file in files_preprocess),
+            files=files_preprocess,
+        )
 
         p_output.mkdir(parents=True, exist_ok=True)
-        p_analysis_out.write_text(result.model_dump_json(indent=2))
-        print(f"Saved to \"{p_analysis_out}\"")
+        p_analysis_for_raw_out.write_text(result.model_dump_json(indent=2), encoding="utf-8")
+        p_analysis_for_preprocess_out.write_text(result_preprocess.model_dump_json(indent=2), encoding="utf-8")
+        print(f"Saved to \"{p_analysis_for_raw_out}\" and \"{p_analysis_for_preprocess_out}\".")
+
     main()
