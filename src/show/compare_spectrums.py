@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Sequence
 
 from parser.explosives_csv_parser import ExplosivesCsvParser, ParseOutput, ExplosivesMetadata
-from analysis.preprocessing import clip_outliers_iqr, get_spectrum_without_bg, normalize_spectrum
+from analysis.preprocessing import get_spectrum
 from show.plot_tools import show_plot, PlotLine
 
 
@@ -23,7 +23,7 @@ def compare_plots(lines: Sequence[ExclusionLine], p_output_path: Path, title: st
 
         plot_lines.append(PlotLine(
             label=get_line_label(line.parsed.data.metadata, line.signal_index),
-            values=normalize_spectrum(clip_outliers_iqr(get_spectrum_without_bg(signal, background))),
+            values=get_spectrum(signal, background),
             style=line.style,
             color=line.color,
         ))

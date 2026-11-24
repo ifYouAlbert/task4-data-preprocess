@@ -42,3 +42,7 @@ def normalize_spectrum(spectrum: Sequence[float]) -> list[float]:
         return [0.0] * len(spectrum)
 
     return [(value - minimum) / value_range for value in spectrum]
+
+
+def get_spectrum(signal: Sequence[float], background: Sequence[float]) -> list[float]:
+    return normalize_spectrum(clip_outliers_iqr(get_spectrum_without_bg(signal, background)))
